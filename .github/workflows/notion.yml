@@ -2,7 +2,7 @@ name: Notion Auto Linker
 
 on:
   schedule:
-    - cron: "*/15 * * * *"  # every 15 minutes
+    - cron: "0 */2 * * *"  # every two hours
   workflow_dispatch:       # allows manual trigger
 
 jobs:
