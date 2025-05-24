@@ -49,7 +49,6 @@ def filter_books_by_year(books, year: int, already_linked_ids):
     for entry in books:
         props = entry["properties"]
 
-        # Support both 'status' and 'select'
         status_obj = props.get("Status", {})
         status = ""
         if "status" in status_obj:
@@ -84,7 +83,7 @@ def update_books_read(year_page_id, all_book_ids):
     r = requests.patch(url, headers=HEADERS, json=payload)
     r.raise_for_status()
 
-def update_most_recent_tags(books, n=2):
+def update_least_recent_tags(books, n=2):
     not_started_books = []
 
     print("📋 Listing all book statuses:")
@@ -92,7 +91,6 @@ def update_most_recent_tags(books, n=2):
         props = b["properties"]
         title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
 
-        # Support both 'status' and 'select'
         status_obj = props.get("Status", {})
         status = ""
         if "status" in status_obj:
@@ -107,24 +105,24 @@ def update_most_recent_tags(books, n=2):
 
     print(f"🔍 Found {len(not_started_books)} book(s) with Status == 'Não iniciado'.")
 
-    books_sorted = sorted(not_started_books, key=lambda e: e["created_time"], reverse=True)
-    most_recent_ids = set(entry["id"] for entry in books_sorted[:n])
+    books_sorted = sorted(not_started_books, key=lambda e: e["created_time"])
+    least_recent_ids = set(entry["id"] for entry in books_sorted[:n])
 
-    print(f"🏷 Will mark {len(most_recent_ids)} book(s) as Most Recent.")
+    print(f"🏷 Will mark {len(least_recent_ids)} book(s) as Least Recent (oldest).")
 
     for entry in books:
         props = entry["properties"]
         book_id = entry["id"]
         title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
-        current_flag = props.get("Most Recent", {}).get("checkbox", False)
-        should_flag = book_id in most_recent_ids
+        current_flag = props.get("Least Recent", {}).get("checkbox", False)
+        should_flag = book_id in least_recent_ids
 
         if current_flag != should_flag:
-            print(f"🔧 Updating '{title}' → Most Recent = {should_flag}")
+            print(f"🔧 Updating '{title}' → Least Recent = {should_flag}")
             url = f"https://api.notion.com/v1/pages/{book_id}"
             payload = {
                 "properties": {
-                    "Most Recent": {
+                    "Least Recent": {
                         "checkbox": should_flag
                     }
                 }
@@ -139,7 +137,7 @@ def main():
     print(f"📆 Target year: {year_str}")
 
     books = query_database(DATABASE_A_ID)
-    update_most_recent_tags(books, n=2)
+    update_least_recent_tags(books, n=2)
 
     year_entry = find_year_page(year_str)
     if not year_entry:
