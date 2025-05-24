@@ -13,7 +13,7 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# === Get all entries from a Notion database ===
+# === Fetch all entries from a database ===
 def query_database(database_id):
     url = f"https://api.notion.com/v1/databases/{database_id}/query"
     results = []
@@ -29,27 +29,26 @@ def query_database(database_id):
             break
     return results
 
-# === Find year page by name ===
-def find_year_page(year: str):
+# === Find the page in Dataset B with Name == current year ===
+def find_year_page(year_str):
     entries = query_database(DATABASE_B_ID)
     for entry in entries:
         title_parts = entry["properties"].get("Name", {}).get("title", [])
         title = title_parts[0]["plain_text"] if title_parts else ""
-        if title == year:
+        if title == year_str:
             return entry
     return None
 
-# === Get already-linked book IDs ===
+# === Get already-linked book IDs in 'Books Read' ===
 def get_existing_book_ids(entry):
     rel = entry["properties"].get("Books Read", {}).get("relation", [])
     return set(r["id"] for r in rel)
 
-# === Filter books that match the year and aren't already linked ===
+# === Filter books marked as 'Lido' with Fim in the given year ===
 def filter_books_by_year(books, year: int, already_linked_ids):
     start_date = datetime.datetime(year, 1, 1)
     end_date = datetime.datetime(year, 12, 31)
     to_add = []
-
     for entry in books:
         props = entry["properties"]
         status = props.get("Status", {}).get("select", {}).get("name", "")
@@ -60,11 +59,10 @@ def filter_books_by_year(books, year: int, already_linked_ids):
             date = datetime.datetime.fromisoformat(date_str[:10])
             if start_date <= date <= end_date and book_id not in already_linked_ids:
                 to_add.append((book_id, props["Name"]["title"][0]["plain_text"]))
-
     return to_add
 
-# === Update the 'Books Read' field with new links ===
-def update_relation(year_page_id, all_book_ids):
+# === Update 'Books Read' property in Year page ===
+def update_books_read(year_page_id, all_book_ids):
     url = f"https://api.notion.com/v1/pages/{year_page_id}"
     payload = {
         "properties": {
@@ -76,31 +74,58 @@ def update_relation(year_page_id, all_book_ids):
     r = requests.patch(url, headers=HEADERS, json=payload)
     r.raise_for_status()
 
+# === Mark the N most recent books with Status == "Não iniciado" ===
+def update_most_recent_tags(books, n=2):
+    not_started_books = [
+        b for b in books
+        if b["properties"].get("Status", {}).get("select", {}).get("name", "") == "Não iniciado"
+    ]
+
+    books_sorted = sorted(not_started_books, key=lambda e: e["created_time"], reverse=True)
+    most_recent_ids = set(entry["id"] for entry in books_sorted[:n])
+
+    for entry in books:
+        book_id = entry["id"]
+        current_flag = entry["properties"].get("Most Recent", {}).get("checkbox", False)
+        should_flag = book_id in most_recent_ids
+
+        if current_flag != should_flag:
+            url = f"https://api.notion.com/v1/pages/{book_id}"
+            payload = {
+                "properties": {
+                    "Most Recent": {
+                        "checkbox": should_flag
+                    }
+                }
+            }
+            r = requests.patch(url, headers=HEADERS, json=payload)
+            r.raise_for_status()
+            print(f"{'✅' if should_flag else '❌'} Set 'Most Recent' = {should_flag} for {book_id}")
+
 # === MAIN ===
 def main():
-    target_year = str(datetime.datetime.now().year)  # Use current year dynamically
-    print(f"📆 Target year: {target_year}")
+    year_str = str(datetime.datetime.now().year)
+    print(f"📆 Target year: {year_str}")
 
-    year_entry = find_year_page(target_year)
+    books = query_database(DATABASE_A_ID)
+    update_most_recent_tags(books, n=2)
+
+    year_entry = find_year_page(year_str)
     if not year_entry:
-        print(f"❌ Year entry '{target_year}' not found in Dataset B.")
+        print(f"❌ Year page '{year_str}' not found.")
         return
 
-    year_page_id = year_entry["id"]
     existing_ids = get_existing_book_ids(year_entry)
-
-    print("🔎 Fetching all books...")
-    books = query_database(DATABASE_A_ID)
-    new_books = filter_books_by_year(books, int(target_year), existing_ids)
+    new_books = filter_books_by_year(books, int(year_str), existing_ids)
 
     if not new_books:
         print("📚 No new books to add.")
         return
 
     all_ids = existing_ids.union([book_id for book_id, _ in new_books])
-    update_relation(year_page_id, all_ids)
+    update_books_read(year_entry["id"], all_ids)
 
-    print(f"✅ Added {len(new_books)} new book(s):")
+    print(f"✅ Added {len(new_books)} new book(s) to 'Books Read':")
     for _, title in new_books:
         print(f" • {title}")
 
