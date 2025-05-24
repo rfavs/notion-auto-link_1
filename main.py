@@ -8,7 +8,7 @@ DATABASE_A_ID = os.environ["DATABASE_A_ID"]  # Books
 DATABASE_B_ID = os.environ["DATABASE_B_ID"]  # Years
 
 HEADERS = {
-    "Authorization": f"Bearer {TOKEN}",
+    "Authorization": f"Bearer " + TOKEN,
     "Notion-Version": "2022-06-28",
     "Content-Type": "application/json"
 }
@@ -49,16 +49,25 @@ def filter_books_by_year(books, year: int, already_linked_ids):
     start_date = datetime.datetime(year, 1, 1)
     end_date = datetime.datetime(year, 12, 31)
     to_add = []
+
     for entry in books:
         props = entry["properties"]
         status = props.get("Status", {}).get("select", {}).get("name", "")
-        date_str = props.get("Fim", {}).get("date", {}).get("start", None)
+
+        # SAFER: handle missing or empty 'Fim'
+        fim_prop = props.get("Fim")
+        date_str = None
+        if fim_prop and fim_prop.get("date"):
+            date_str = fim_prop["date"].get("start")
+
         book_id = entry["id"]
 
         if status == "Lido" and date_str:
             date = datetime.datetime.fromisoformat(date_str[:10])
             if start_date <= date <= end_date and book_id not in already_linked_ids:
-                to_add.append((book_id, props["Name"]["title"][0]["plain_text"]))
+                title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
+                to_add.append((book_id, title))
+
     return to_add
 
 # === Update 'Books Read' property in Year page ===
