@@ -137,6 +137,39 @@ def main():
     print(f"📆 Target year: {year_str}")
 
     books = query_database(DATABASE_A_ID)
+
+    # === Auto-set Status = "Lido" if Fim exists ===
+    for entry in books:
+        props = entry["properties"]
+        book_id = entry["id"]
+        title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
+
+        # Get current status
+        status_obj = props.get("Status", {})
+        current_status = ""
+        if "status" in status_obj:
+            current_status = status_obj["status"].get("name", "")
+        elif "select" in status_obj:
+            current_status = status_obj["select"].get("name", "")
+
+        # Get Fim
+        fim = props.get("Fim", {}).get("date", {}).get("start", None)
+
+        if fim and current_status != "Lido":
+            print(f"🔁 Updating '{title}' → Status = 'Lido' (Fim is set)")
+            url = f"https://api.notion.com/v1/pages/{book_id}"
+            payload = {
+                "properties": {
+                    "Status": {
+                        "status": {
+                            "name": "Lido"
+                        }
+                    }
+                }
+            }
+            r = requests.patch(url, headers=HEADERS, json=payload)
+            r.raise_for_status()
+
     update_least_recent_tags(books, n=2)
 
     year_entry = find_year_page(year_str)
