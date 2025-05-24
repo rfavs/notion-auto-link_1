@@ -54,7 +54,6 @@ def filter_books_by_year(books, year: int, already_linked_ids):
         props = entry["properties"]
         status = props.get("Status", {}).get("select", {}).get("name", "")
 
-        # SAFER: handle missing or empty 'Fim'
         fim_prop = props.get("Fim")
         date_str = None
         if fim_prop and fim_prop.get("date"):
@@ -83,22 +82,28 @@ def update_books_read(year_page_id, all_book_ids):
     r = requests.patch(url, headers=HEADERS, json=payload)
     r.raise_for_status()
 
-# === Mark the N most recent books with Status == "Não iniciado" ===
+# === DEBUG VERSION: mark the N most recent books with Status == "Não iniciado" ===
 def update_most_recent_tags(books, n=2):
     not_started_books = [
         b for b in books
         if b["properties"].get("Status", {}).get("select", {}).get("name", "") == "Não iniciado"
     ]
 
+    print(f"🔍 Found {len(not_started_books)} book(s) with Status == 'Não iniciado'.")
+
     books_sorted = sorted(not_started_books, key=lambda e: e["created_time"], reverse=True)
     most_recent_ids = set(entry["id"] for entry in books_sorted[:n])
 
+    print(f"🏷 Will mark {len(most_recent_ids)} book(s) as Most Recent.")
+
     for entry in books:
         book_id = entry["id"]
+        title = entry["properties"].get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
         current_flag = entry["properties"].get("Most Recent", {}).get("checkbox", False)
         should_flag = book_id in most_recent_ids
 
         if current_flag != should_flag:
+            print(f"🔧 Updating '{title}' → Most Recent = {should_flag}")
             url = f"https://api.notion.com/v1/pages/{book_id}"
             payload = {
                 "properties": {
@@ -109,7 +114,8 @@ def update_most_recent_tags(books, n=2):
             }
             r = requests.patch(url, headers=HEADERS, json=payload)
             r.raise_for_status()
-            print(f"{'✅' if should_flag else '❌'} Set 'Most Recent' = {should_flag} for {book_id}")
+        else:
+            print(f"➖ No change for '{title}' (already set to {current_flag})")
 
 # === MAIN ===
 def main():
