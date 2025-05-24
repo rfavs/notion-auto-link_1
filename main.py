@@ -56,15 +56,15 @@ def filter_books_by_year(books, year: int, already_linked_ids):
         elif "select" in status_obj:
             status = status_obj["select"].get("name", "")
 
+        fim = None
         fim_prop = props.get("Fim")
-        date_str = None
-        if fim_prop and fim_prop.get("date"):
-            date_str = fim_prop["date"].get("start")
+        if fim_prop and "date" in fim_prop:
+            fim = fim_prop["date"].get("start")
 
         book_id = entry["id"]
 
-        if status == "Lido" and date_str:
-            date = datetime.datetime.fromisoformat(date_str[:10])
+        if status == "Lido" and fim:
+            date = datetime.datetime.fromisoformat(fim[:10])
             if start_date <= date <= end_date and book_id not in already_linked_ids:
                 title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
                 to_add.append((book_id, title))
@@ -136,10 +136,9 @@ def main():
     year_str = str(datetime.datetime.now().year)
     print(f"📆 Target year: {year_str}")
 
-    # Step 1: Get current books
     books = query_database(DATABASE_A_ID)
 
-    # Step 2: Update Status = "Lido" if Fim is filled
+    # Safely update Status to 'Lido' if Fim is filled
     for entry in books:
         props = entry["properties"]
         book_id = entry["id"]
@@ -152,7 +151,10 @@ def main():
         elif "select" in status_obj:
             current_status = status_obj["select"].get("name", "")
 
-        fim = props.get("Fim", {}).get("date", {}).get("start", None)
+        fim = None
+        fim_prop = props.get("Fim")
+        if fim_prop and "date" in fim_prop:
+            fim = fim_prop["date"].get("start")
 
         if fim and current_status != "Lido":
             print(f"🔁 Updating '{title}' → Status = 'Lido' (Fim is set)")
@@ -169,13 +171,11 @@ def main():
             r = requests.patch(url, headers=HEADERS, json=payload)
             r.raise_for_status()
 
-    # Step 3: Refresh book list to include new 'Lido' status updates
+    # Refresh books list to reflect updates
     books = query_database(DATABASE_A_ID)
 
-    # Step 4: Tag least recent
     update_least_recent_tags(books, n=2)
 
-    # Step 5: Update yearly reading list
     year_entry = find_year_page(year_str)
     if not year_entry:
         print(f"❌ Year page '{year_str}' not found.")
