@@ -13,7 +13,6 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# === Fetch all entries from a database ===
 def query_database(database_id):
     url = f"https://api.notion.com/v1/databases/{database_id}/query"
     results = []
@@ -29,7 +28,6 @@ def query_database(database_id):
             break
     return results
 
-# === Find the page in Dataset B with Name == current year ===
 def find_year_page(year_str):
     entries = query_database(DATABASE_B_ID)
     for entry in entries:
@@ -39,12 +37,10 @@ def find_year_page(year_str):
             return entry
     return None
 
-# === Get already-linked book IDs in 'Books Read' ===
 def get_existing_book_ids(entry):
     rel = entry["properties"].get("Books Read", {}).get("relation", [])
     return set(r["id"] for r in rel)
 
-# === Filter books marked as 'Lido' with Fim in the given year ===
 def filter_books_by_year(books, year: int, already_linked_ids):
     start_date = datetime.datetime(year, 1, 1)
     end_date = datetime.datetime(year, 12, 31)
@@ -52,7 +48,14 @@ def filter_books_by_year(books, year: int, already_linked_ids):
 
     for entry in books:
         props = entry["properties"]
-        status = props.get("Status", {}).get("select", {}).get("name", "")
+
+        # Support both 'status' and 'select'
+        status_obj = props.get("Status", {})
+        status = ""
+        if "status" in status_obj:
+            status = status_obj["status"].get("name", "")
+        elif "select" in status_obj:
+            status = status_obj["select"].get("name", "")
 
         fim_prop = props.get("Fim")
         date_str = None
@@ -69,15 +72,36 @@ def filter_books_by_year(books, year: int, already_linked_ids):
 
     return to_add
 
-# === DEBUG: mark the N most recent books with Status == "Não iniciado" ===
+def update_books_read(year_page_id, all_book_ids):
+    url = f"https://api.notion.com/v1/pages/{year_page_id}"
+    payload = {
+        "properties": {
+            "Books Read": {
+                "relation": [{"id": bid} for bid in all_book_ids]
+            }
+        }
+    }
+    r = requests.patch(url, headers=HEADERS, json=payload)
+    r.raise_for_status()
+
 def update_most_recent_tags(books, n=2):
     not_started_books = []
 
     print("📋 Listing all book statuses:")
     for b in books:
-        status = b["properties"].get("Status", {}).get("select", {}).get("name", "")
-        title = b["properties"].get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
+        props = b["properties"]
+        title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
+
+        # Support both 'status' and 'select'
+        status_obj = props.get("Status", {})
+        status = ""
+        if "status" in status_obj:
+            status = status_obj["status"].get("name", "")
+        elif "select" in status_obj:
+            status = status_obj["select"].get("name", "")
+
         print(f"📚 {title} — Status: '{status}'")
+
         if status == "Não iniciado":
             not_started_books.append(b)
 
@@ -89,9 +113,10 @@ def update_most_recent_tags(books, n=2):
     print(f"🏷 Will mark {len(most_recent_ids)} book(s) as Most Recent.")
 
     for entry in books:
+        props = entry["properties"]
         book_id = entry["id"]
-        title = entry["properties"].get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
-        current_flag = entry["properties"].get("Most Recent", {}).get("checkbox", False)
+        title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
+        current_flag = props.get("Most Recent", {}).get("checkbox", False)
         should_flag = book_id in most_recent_ids
 
         if current_flag != should_flag:
@@ -109,7 +134,6 @@ def update_most_recent_tags(books, n=2):
         else:
             print(f"➖ No change for '{title}' (already set to {current_flag})")
 
-# === MAIN ===
 def main():
     year_str = str(datetime.datetime.now().year)
     print(f"📆 Target year: {year_str}")
