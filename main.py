@@ -58,7 +58,7 @@ def filter_books_by_year(books, year: int, already_linked_ids):
 
         fim = None
         fim_prop = props.get("Fim")
-        if fim_prop and "date" in fim_prop:
+        if fim_prop and isinstance(fim_prop.get("date"), dict):
             fim = fim_prop["date"].get("start")
 
         book_id = entry["id"]
@@ -153,7 +153,7 @@ def main():
 
         fim = None
         fim_prop = props.get("Fim")
-        if fim_prop and "date" in fim_prop:
+        if fim_prop and isinstance(fim_prop.get("date"), dict):
             fim = fim_prop["date"].get("start")
 
         if fim and current_status != "Lido":
