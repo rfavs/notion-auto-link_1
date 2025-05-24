@@ -69,25 +69,17 @@ def filter_books_by_year(books, year: int, already_linked_ids):
 
     return to_add
 
-# === Update 'Books Read' property in Year page ===
-def update_books_read(year_page_id, all_book_ids):
-    url = f"https://api.notion.com/v1/pages/{year_page_id}"
-    payload = {
-        "properties": {
-            "Books Read": {
-                "relation": [{"id": bid} for bid in all_book_ids]
-            }
-        }
-    }
-    r = requests.patch(url, headers=HEADERS, json=payload)
-    r.raise_for_status()
-
-# === DEBUG VERSION: mark the N most recent books with Status == "Não iniciado" ===
+# === DEBUG: mark the N most recent books with Status == "Não iniciado" ===
 def update_most_recent_tags(books, n=2):
-    not_started_books = [
-        b for b in books
-        if b["properties"].get("Status", {}).get("select", {}).get("name", "") == "Não iniciado"
-    ]
+    not_started_books = []
+
+    print("📋 Listing all book statuses:")
+    for b in books:
+        status = b["properties"].get("Status", {}).get("select", {}).get("name", "")
+        title = b["properties"].get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
+        print(f"📚 {title} — Status: '{status}'")
+        if status == "Não iniciado":
+            not_started_books.append(b)
 
     print(f"🔍 Found {len(not_started_books)} book(s) with Status == 'Não iniciado'.")
 
